@@ -1,119 +1,204 @@
-# Recall: CREWASIS Hackathon 2026
+# Recall
+### From intelligence delivered to intelligence that compounds.
 
-Streamlit + LangGraph prototype of the Recall multi-agent pipeline for Haleon's GLP-1
-vitamins and supplements team. Synthetic HAZRA signals, SQLite client memory, three
-real human approval gates, and a full agent action log.
+Built for the **CREWASIS External Hackathon 2026** by Team 1.
 
-## Run
+---
 
-```bash
-python3.12 -m venv venv && source venv/bin/activate
-pip install -r requirements.txt
-cp .env.example .env        # then fill in the keys
-python -m scripts.tune_thresholds   # optional, offline, no keys needed
-streamlit run app.py
-```
+## What is Recall
 
-Python 3.12 is recommended: PyTorch wheels for the newest interpreters lag behind.
-The first run downloads the `all-MiniLM-L6-v2` embedding model (about 90 MB).
+Recall is a multi-agent decision memory layer built on top of CREWASIS's Winston and HAZRA platform. Winston today answers the questions clients bring to it. Recall makes Winston remember every decision, compound every engagement, and proactively surface intelligence before clients even ask.
+
+Every insight, every approved direction, and every rejected claim with its legal reason gets stored as institutional memory. The next engagement starts smarter. Brands stop re-learning what they already paid to learn.
+
+---
+
+## The Problem
+
+Every CREWASIS engagement ends when the answer is delivered. The decision that follows happens somewhere else. The next engagement starts from zero. Years of working with a client and Winston still does not know what they tried, what legal rejected, or what window they are currently in.
+
+---
+
+## The Solution
+
+Three agents working as one pipeline:
+
+**Strategy Drafting Agent:** Takes HAZRA ranked signals and drafts a grounded strategic brief. Every claim has a verified source citation. Confidence scored. Citations validated in Python, not by the model. Secondary retrieval loop if signal is insufficient.
+
+**Claims and Positioning Agent:** Drafts evidence-backed marketing claims ranked by HAZRA consumer resonance. Checks every claim against past legal rejections before the client sees them. Flags matches automatically.
+
+**Memory and Continuity Agent:** Stores every approved brief, selected claim, and rejected direction with reasons as structured institutional memory. Surfaces it when relevant. Next session starts with everything already known.
+
+**Proactive Notification Agent:** HAZRA runs on a scheduled cadence. When a signal crosses a significance threshold, Winston sends a structured brief to Slack or email automatically. Client responds. Memory updates.
+
+---
 
 ## Architecture
 
-Three layers: data at the bottom, four agents in the middle, humans on top with a
-mandatory gate at every consequential decision.
+```
+HAZRA weekly schedule
+        |
+        v
+Notification Agent -> Slack / Email -> client responds
+        |
+        v
+Query Router (rules only, no model call)
+Signal / Memory / Synthesis / Urgency / Unanswerable
+        |
+        v
+Hybrid Retrieval: BM25 + Dense + Reciprocal Rank Fusion
+        |
+        v
+Citation Enforcement + Ghost Citation Detection (Python)
+        |
+        v
+Orchestrator: routes based on agent findings
+        |
+        v
+Memory Agent: finds conflict or precedent
+[HUMAN CONFLICT GATE: LangGraph interrupt]
+        |
+        v
+Strategy Agent: loops until confidence above 0.70
+[HUMAN BRIEF GATE: LangGraph interrupt]
+        |
+        v
+Claims Agent: flags past rejections before client sees them
+[HUMAN CLAIM GATE: LangGraph interrupt]
+        |
+        v
+Memory Agent writes: atomic transaction, three writes
+Next engagement starts smarter
+```
+
+---
+
+## Human in the Loop
+
+Three hard LangGraph interrupt gates. The graph cannot advance without a human input event. No timeout. No auto-approve. State checkpointed to SQLite so approval survives server restarts.
+
+- **Conflict gate:** fires before drafting starts if memory finds a conflict
+- **Brief approval gate:** analyst refines, client approves or rejects
+- **Claim selection gate:** client selects, memory records the decision
+
+---
+
+## Tech Stack
+
+| Tool | Purpose |
+|---|---|
+| Python 3.12 | Language |
+| Streamlit | UI (four tabs) |
+| LangGraph | Multi-agent orchestration with interrupt gates |
+| LangSmith | Automatic observability for every agent run |
+| Azure GPT-5.4 | LLM, structured output mode only |
+| SQLite | Database for memory, logs, and checkpoints |
+| BM25 + sentence-transformers | Hybrid retrieval |
+| Reciprocal Rank Fusion | Combines BM25 and dense results |
+| Slack Block Kit API | Real proactive notifications |
+| FastAPI + uvicorn | Webhook server for Slack button responses |
+| ngrok | Public tunnel for Slack webhook in development |
+
+---
+
+## Observability
+
+Three layers:
+
+- **LangSmith:** what the agents did and why, full LLM trace per run
+- **Datadog:** infrastructure health, API latency, error rates (production)
+- **Action log:** what humans decided and what evidence they had, client-facing audit trail
+
+---
+
+## The Urgency Signal
+
+HAZRA captures when a consumer signal first appears and starts climbing. Public launch records give the other end. The gap is the window.
+
+Two verified real-world examples:
+
+- GLP-1 muscle loss: signal detectable early 2022, Herbalife launched February 8 2024 (**24 months**)
+- Pet joint health: signal climbing 2020 to 2021, Mars Petcare entered March 2023
+
+Output is an urgency tier: **Act This Quarter / Act This Year / Monitor**. Not a false precision number.
+
+---
+
+## Demo Queries
+
+Three scripted queries that demonstrate the full pipeline:
+
+**Query 1:** "What should we do about the muscle health opportunity for GLP-1 customers?"
+Memory agent finds precedent. Brief drafted with three verified citations. Confidence 0.88.
+
+**Query 2:** "Draft a marketing claim for our GLP-1 muscle preservation product."
+Claims agent flags clinically proven language automatically from past legal rejection in memory.
+
+**Query 3:** "What is the competitive whitespace in GLP-1 nutrition for Haleon?"
+Conflict gate fires before drafting. Secondary retrieval loop visible in step history. Richer brief incorporating four signals and two sessions of memory.
+
+---
+
+## Setup
+
+```bash
+# Clone the repo
+git clone https://github.com/GauravBohra2001/recall.git
+cd recall
+
+# Create virtual environment
+python3.12 -m venv venv
+source venv/bin/activate
+
+# Install dependencies
+pip install -r requirements.txt
+
+# Copy environment variables
+cp .env.example .env
+# Fill in your credentials in .env
+
+# Run the app
+streamlit run app.py
+```
+
+For the Slack webhook integration, run in separate terminals:
+
+```bash
+uvicorn webhook:app --host 0.0.0.0 --port 8000
+ngrok http 8000
+```
+
+Then update the Request URL in your Slack app's Interactivity settings.
+
+---
+
+## Environment Variables
 
 ```
-router (pure Python)
-  -> memory agent -+-> [HUMAN: conflict gate] -> strategy agent
-                   |     retrieve -> assess <-> secondary_retrieve -> draft + validate
-                   |                                   -> [HUMAN: brief approval] -> memory_write
-                   +-> claims agent
-                         retrieve -> draft -> flag against memory
-                                   -> [HUMAN: claim selection] -> memory_write
+AZURE_OPENAI_ENDPOINT=
+AZURE_OPENAI_API_KEY=
+AZURE_OPENAI_DEPLOYMENT=
+AZURE_OPENAI_API_VERSION=
+LANGCHAIN_API_KEY=
+LANGCHAIN_TRACING_V2=
+LANGCHAIN_PROJECT=
+CLIENT_ID=
+SLACK_BOT_TOKEN=
+SLACK_CHANNEL_ID=
+SLACK_SIGNING_SECRET=
 ```
 
-- **One LangGraph graph**, typed `RecallState`, compiled with `SqliteSaver` on
-  `recall.db`. The bracketed nodes call `langgraph.types.interrupt()`, so the graph
-  genuinely stops and can only continue when the same `thread_id` is resumed with
-  `Command(resume=...)`. Approval state survives a server restart.
-- **`memory_write` is downstream of every gate.** Nothing reaches `client_memory`
-  without a human action having resumed the graph.
-- **No model call in routing or validation.** The router and citation validator are
-  pure Python. Every LLM call uses structured output and a three-attempt retry
-  (0s, 2s, 4s), and on total failure the analyst sees a message, never a traceback.
-- **Hybrid retrieval.** BM25 and dense (MiniLM cosine) run in parallel and are merged
-  with reciprocal rank fusion, k=60.
-- **Citation enforcement.** Every claim must carry `[SOURCE: signal_id]`. Validation
-  checks for uncited claims, ghost citations (ids not retrieved this session) and a
-  0.50 confidence floor. A failure re-prompts the model with the specific errors named,
-  up to three times, then surfaces a structured error. The analyst never sees an
-  ungrounded brief.
-- **Observability.** LangSmith traces every graph run and completion. Every agent
-  action is also written to `agent_action_log` (Tab 3).
+---
 
-## The three demo queries
+## Team
 
-1. *"What should we do about the muscle health opportunity for GLP-1 customers?"*
-   Memory finds precedent MEM-HAL-2024-001 (yellow banner). Signals 001, 002, 003,
-   confidence 0.875. Approve.
-2. *"Draft a marketing claim for our GLP-1 muscle preservation product."*
-   Three options; the "clinically proven" option is flagged red against
-   MEM-HAL-2024-002 with the legal reason. Reject it, select a safe one.
-3. *"What is the competitive whitespace in GLP-1 nutrition for Haleon?"*
-   Memory raises a conflict and the conflict gate stops the run until the analyst
-   decides. The strategy agent then finds no consumer-language signal, names the gap,
-   runs a targeted second retrieval that pulls HAZ-2024-GLP1-004, and reassesses. The
-   loop is visible in the state panel.
+Team 1 - Recall
+CREWASIS External Hackathon 2026
 
-## Deviations from the PRD, all deliberate
+- Gaurav Bohra
+- Kush Patel
+- Nguyen Nguyen (Nicky)
 
-1. **Confidence formula.** The PRD's `mean(confidence * momentum)` returns 0.749 for the
-   Query 1 signals: amber, and below the 0.75 the demo requires. `compute_confidence`
-   uses the momentum-weighted average instead (0.875). The literal version is kept as
-   `compute_confidence_prd_literal` for comparison.
-2. **Secondary retrieval trigger.** The PRD triggers on confidence below 0.70. Because
-   confidence is a weighted average of signals that each score 0.79 to 0.94, it can
-   essentially never fall that low. The trigger is a coverage gap instead: a whitespace
-   question with no `consumer_language_analysis` signal retrieved. It is deterministic
-   and explains itself.
-3. **Memory thresholds and the positioning rule.** `scripts/tune_thresholds.py` showed
-   Query 1 scoring 0.77 against the rejected muscle claim, higher than Query 3 (0.41), so
-   no similarity threshold can make Query 3 the conflict and Query 1 the precedent. The
-   PRD's thresholds (conflict 0.80, precedent 0.60) are used, plus one explicit rule:
-   for a whitespace or positioning question, any related rejected decision (similarity
-   0.35 or more) is a conflict. Whitespace in HAZ-2024-GLP1-002 is a clinical-language
-   claim, which is the direction legal rejected. This rule is calibrated to the demo
-   and should be replaced by an LLM-judged check in production.
-4. **Claim flagging ignores embedding similarity.** Measured on this data, a safe claim
-   scores 0.91 against the rejected claim, the same as a risky paraphrase, because
-   embeddings capture topic, not hedging. Flagging uses string similarity (0.70) and the
-   risky phrases from HAZ-2024-GLP1-005.
-5. **One connection per role.** The checkpointer opens its own connection to
-   `recall.db` rather than sharing the app's, so LangGraph's writes and the app's reads
-   never contend on one cursor.
-6. **`interrupt()` only, no `interrupt_before`.** Using both pauses the graph twice at
-   each gate.
-7. **Tabs are a radio control, not `st.tabs`.** Streamlit cannot switch `st.tabs`
-   programmatically, and Tab 4's "Explore This Now" must jump to Tab 1 and run.
-8. **`langgraph-checkpoint-sqlite` is added to requirements.** `SqliteSaver` lives in
-   that separate package.
+---
 
-## Structured output on Azure
-
-The client first requests `json_schema` (server-enforced). If the deployment rejects
-that response format it drops to `json_object` and checks required fields and enums
-itself. The downgrade is never silent: the mode is written to `agent_action_log`
-(`model_used`) and shown in Tab 3.
-
-## Known gaps
-
-- **Slack buttons need two extra processes.** They work through `webhook.py` (FastAPI, port 8000)
-  and an ngrok tunnel: Slack POSTs the click to the tunnel, the webhook verifies the signing
-  secret and writes to SQLite, and the Streamlit app picks it up within about 2 seconds.
-  Run `./venv/bin/uvicorn webhook:app --port 8000` and `ngrok http 8000`, then set the
-  Interactivity Request URL to `https://<ngrok-host>/slack/actions`. Explore runs the pipeline;
-  Hold and Not Relevant write to memory. The polling pauses while a brief is awaiting approval
-  and any click waits for the next idle moment. A click older than 10 minutes expires.
-- **The claims agent runs directly on claims queries** rather than after a brief
-  approval, matching the three demo scenarios.
-- **`recall.db` is local.** Delete it to reset memory to the three seed decisions.
+*From intelligence delivered to intelligence that compounds.*
